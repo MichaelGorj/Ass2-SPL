@@ -45,7 +45,7 @@ public class MessageBusImpl implements MessageBus {
 	}
 
 	@Override
-	public <T> void complete(Event<T> e, T result) {
+	public /*synchronized*/  <T> void  complete(Event<T> e, T result) {
 		Future<T> tmp = (Future<T>) eventFutHash.get(e);
 		tmp.resolve(result);
 
