@@ -23,7 +23,7 @@ public abstract class MicroService implements Runnable {
     private boolean terminated = false;
     private final String name;
 
-    private HashMap<Class<? extends Message>, Callback<?>> messcallHash=new HashMap<>();
+    private HashMap<Class<? extends Message>, Callback<Message>> messcallHash=new HashMap<>();
 
 
     /**
@@ -56,8 +56,10 @@ public abstract class MicroService implements Runnable {
      *                 queue.
      */
     protected final <T, E extends Event<T>> void subscribeEvent(Class<E> type, Callback<E> callback) {
-    MessageBusImpl.getInstance().subscribeEvent(type, this);
-        messcallHash.put(type, callback);
+        MessageBusImpl.getInstance().subscribeEvent(type, this);
+        if (messcallHash.get(type) == null) {
+            messcallHash.put(type, (Callback<Message>) callback);
+        }
     }
 
 
@@ -82,8 +84,9 @@ public abstract class MicroService implements Runnable {
      *                 queue.
      */
     protected final <B extends Broadcast> void subscribeBroadcast(Class<B> type, Callback<B> callback) {
-       MessageBusImpl.getInstance().subscribeBroadcast(type, this);
-        messcallHash.put(type, callback);
+        MessageBusImpl.getInstance().subscribeBroadcast(type, this);
+        if(messcallHash.get(type)==null)
+            messcallHash.put(type,((Callback<Message>)callback));
     }
 
     /**
@@ -99,8 +102,7 @@ public abstract class MicroService implements Runnable {
      * 	       			null in case no micro-service has subscribed to {@code e.getClass()}.
      */
     protected final <T> Future<T> sendEvent(Event<T> e) {
-       // e.getClass()==??;
-        return null; //TODO: delete this line :)
+       return MessageBusImpl.getInstance().sendEvent(e);
     }
 
     /**
@@ -112,7 +114,103 @@ public abstract class MicroService implements Runnable {
     protected final void sendBroadcast(Broadcast b) {
     MessageBusImpl.getInstance().sendBroadcast(b);
     }
-
+package bgu.spl.mics;
+2
+import java.util.HashMap;
+3
+/**
+4
+ * The MicroService is an abstract class that any micro-service in the system
+5
+ * must extend. The abstract MicroService class is responsible to get and
+6
+ * manipulate the singleton {@link MessageBus} instance.
+7
+ * <p>
+8
+ * Derived classes of MicroService should never directly touch the message-bus.
+9
+ * Instead, they have a set of internal protected wrapping methods (e.g.,
+10
+ * {@link #sendBroadcast(bgu.spl.mics.Broadcast)}, {@link #sendBroadcast(bgu.spl.mics.Broadcast)},
+11
+ * etc.) they can use. When subscribing to message-types,
+12
+ * the derived class also supplies a {@link Callback} that should be called when
+13
+ * a message of the subscribed type was taken from the micro-service
+14
+ * message-queue (see {@link MessageBus#register(bgu.spl.mics.MicroService)}
+15
+ * method). The abstract MicroService stores this callback together with the
+16
+ * type of the message is related to.
+17
+ * 
+18
+ * Only private fields and methods may be added to this class.
+19
+ * <p>
+20
+ */
+21
+public abstract class MicroService implements Runnable {
+22
+​
+23
+    private boolean terminated = false;
+24
+    private final String name;
+25
+​
+26
+    private HashMap<Class<? extends Message>, Callback<?>> messcallHash=new HashMap<>();
+27
+​
+28
+​
+29
+    /**
+30
+     * @param name the micro-service name (used mainly for debugging purposes -
+31
+     *             does not have to be unique)
+32
+     */
+33
+    public MicroService(String name) {
+34
+        this.name = name;
+35
+    }
+36
+​
+37
+    /**
+38
+     * Subscribes to events of type {@code type} with the callback
+39
+     * {@code callback}. This means two things:
+40
+     * 1. Subscribe to events in the singleton event-bus using the supplied
+41
+     * {@code type}
+42
+     * 2. Store the {@code callback} so that when events of type {@code type}
+43
+     * are received it will be called.
+44
+     * <p>
+45
+     * For a received message {@code m} of type {@code type = m.getClass()}
+46
+     * calling the callback {@code callback} means running the method
+47
+     * {@link Callback#call(java.lang.Object)} by calling
+48
+     * {@code callback.call(m)}.
+49
+     * <p>
     /**
      * Completes the received request {@code e} with the result {@code result}
      * using the message-bus.
@@ -124,7 +222,7 @@ public abstract class MicroService implements Runnable {
      *               {@code e}.
      */
     protected final <T> void complete(Event<T> e, T result) {
-        //TODO: implement this.
+        MessageBusImpl.getInstance().complete(e,result);
     }
 
     /**
@@ -154,9 +252,16 @@ public abstract class MicroService implements Runnable {
      */
     @Override
     public final void run() {
+        MessageBusImpl.getInstance().register(this);
         initialize();
         while (!terminated) {
-            System.out.println("NOT IMPLEMENTED!!!"); //TODO: you should delete this line :)
+            try {
+                Message mes= MessageBusImpl.getInstance().awaitMessage(this);
+                messcallHash.get(mes.getClass()).call(mes);
+            } catch (InterruptedException e) {
+               // System.out.println("stuff");
+                e.printStackTrace();
+            }
         }
     }
 
