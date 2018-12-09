@@ -61,6 +61,9 @@ public abstract class MicroService implements Runnable {
             messcallHash.put(type, (Callback<Message>) callback);
         }
 
+    }
+
+
 
     /**
      * Subscribes to broadcast message of type {@code type} with the callback
