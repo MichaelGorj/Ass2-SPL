@@ -60,7 +60,6 @@ public abstract class MicroService implements Runnable {
         if (messcallHash.get(type) == null) {
             messcallHash.put(type, (Callback<Message>) callback);
         }
-    }
 
 
     /**
