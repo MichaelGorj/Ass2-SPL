@@ -13,17 +13,20 @@ public class MessageBusImpl implements MessageBus {
 	private static MessageBus instance = new MessageBusImpl();
 	private ConcurrentHashMap<Class<? extends Message>, Queue<MicroService>> messgehash;
 	private ConcurrentHashMap<MicroService, Queue<Message>> microQueue;
-	//ConcurrentHashMap<Future<?>>;
+	private ConcurrentHashMap<Event<?>, Future<?>> eventFutHash;
+
 	private MessageBusImpl() {
 		//Initializing messgehash
-		 messgehash = new ConcurrentHashMap<>();
+		messgehash = new ConcurrentHashMap<>();
 		Queue<MicroService> q = new LinkedList<>();
-		for (Class<? extends Message> mt:messgehash.keySet()) {
-		messgehash.put(mt, q);
+		for (Class<? extends Message> mt : messgehash.keySet()) {
+			messgehash.put(mt, q);
 		}
 		//Initializing microQueue
-		 microQueue=new ConcurrentHashMap<>();
+		microQueue = new ConcurrentHashMap<>();
+		eventFutHash=new ConcurrentHashMap<>();
 	}
+
 	public static MessageBus getInstance() {
 		return instance;
 	}
@@ -31,7 +34,7 @@ public class MessageBusImpl implements MessageBus {
 
 	@Override
 	public <T> void subscribeEvent(Class<? extends Event<T>> type, MicroService m) {
-		if(!messgehash.get(type).contains(m))
+		if (!messgehash.get(type).contains(m))
 			messgehash.get(type).add(m);
 	}
 
@@ -42,54 +45,71 @@ public class MessageBusImpl implements MessageBus {
 	}
 
 	@Override
-	public <T> void complete(Event<T> e, T result) {
-		// TODO Auto-generated method stub
+	public /*synchronized*/  <T> void  complete(Event<T> e, T result) {
+		Future<T> tmp = (Future<T>) eventFutHash.get(e);
+		tmp.resolve(result);
 
 	}
 
 	@Override
-	public void sendBroadcast(Broadcast b) {
-		for (int i = 0; i < messgehash.get(b.getClass()).size(); i++) {
-			MicroService temp = messgehash.get(b.getClass()).remove();
-			microQueue.get(temp).add(b);
-			messgehash.get(b.getClass()).add(temp);
+	public synchronized void sendBroadcast(Broadcast b) {
+		if (b.getClass() != null) {
+			for (int i = 0; i < messgehash.get(b.getClass()).size(); i++) {
+				MicroService temp = messgehash.get(b.getClass()).remove();
+				microQueue.get(temp).add(b);
+				messgehash.get(b.getClass()).add(temp);
+			}
 		}
 	}
 
-	
+
 	@Override
 	public <T> Future<T> sendEvent(Event<T> e) {
-		// TODO Auto-generated method stub
+		if (e.getClass() != null) {
+			Future<T> temp = new Future<>();
+			eventFutHash.put(e, temp);
+			MicroService tempM = messgehash.get(e.getClass()).remove();//??
+			microQueue.get(tempM).add(e);//??
+			messgehash.get(e.getClass()).add(tempM);//??
+			return temp;
+		}
+		notifyAll();///?
 		return null;
 	}
 
 	@Override
 	public void register(MicroService m) {
 		Queue<Message> q = new LinkedList<>();
-	microQueue.put(m, q);
+		microQueue.put(m, q);
 	}
 
 	@Override
 	public void unregister(MicroService m) {
 		MicroService tempmicro;
-		for (Class<? extends Message> mess:messgehash.keySet()){
-			if (messgehash.get(mess).contains(m)){
-				for (int i = 0; i <messgehash.get(mess).size() ; i++) {
-					tempmicro=messgehash.get(mess).remove();
-					if(tempmicro!=m)
+		for (Class<? extends Message> mess : messgehash.keySet()) {
+			if (messgehash.get(mess).contains(m)) {
+				for (int i = 0; i < messgehash.get(mess).size(); i++) {
+					tempmicro = messgehash.get(mess).remove();
+					if (tempmicro != m)
 						messgehash.get(mess).add(tempmicro);
 				}
 			}
 		}
-	microQueue.remove(m);//??
+		microQueue.remove(m);
 	}
 
 	@Override
 	public Message awaitMessage(MicroService m) throws InterruptedException {
-		// TODO Auto-generated method stub
-		return null;
+		if (microQueue.get(m) == null) {
+			throw new InterruptedException();
+		} else {
+			while (microQueue.get(m).isEmpty()) {
+				m.wait();//??
+			}
+			Message tmp = microQueue.get(m).remove();
+			return tmp;
+		}
 	}
 
-	
 
 }
